@@ -6,7 +6,15 @@ Requires:
 1. list of plasmid lengths
 2. plasmid fasta files
 
-Script will only accept alignment regions >100bp and >90% identity
+Dependencies: 
+1. mummer (nucmer)
+2. biopython
+
+Script will only accept alignment regions >1000bp and >90% identity
+
+IMPORTANT: put the merge_fasta.sh script somewhere and point to it within this script (line 85)
+
+To run: ebenn_plasmids.py <directory with plasmids in fasta> <list of plasmids and their length>
 """
 
 import glob
@@ -43,7 +51,6 @@ def bashcommand(command):
         exit(1)
 
 
-# -I 90 and -L 100 control minimum identity (90%) and minimum alignment (100bp) respectively
 def run_nucmer(plasmidA, plasmidB, path):
     A = path + "/" + plasmidA
     B = path + "/" + plasmidB
@@ -74,7 +81,8 @@ for p_check in all_plasmids:
             record_count += 1
         if record_count > 1:
             p = os.path.splitext(p_check)[0]+'.merged.fasta'
-            bashcommand("~/PycharmProjects/scripts/merge_fasta.sh %s %s" % (p_check, p)) # change
+            #### CHANGE THE PATH TO MERGE_FASTA.SH HERE ####
+            bashcommand("/path/to/merge_fasta.sh %s %s" % (p_check, p)) 
             all_plasmids = list(map(lambda x: x.replace(p_check, p), all_plasmids))
         else:
             p = p_check
