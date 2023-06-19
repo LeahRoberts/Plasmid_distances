@@ -15,6 +15,7 @@ import subprocess
 import sys
 from subprocess import CalledProcessError
 from statistics import mean
+from Bio import SeqIO
 
 input_dir = sys.argv[1]
 lengths = sys.argv[2]
@@ -46,8 +47,8 @@ def bashcommand(command):
 def run_nucmer(plasmidA, plasmidB, path):
     A = path + "/" + plasmidA
     B = path + "/" + plasmidB
-    bashcommand("nucmer %s %s" % (A, B))
-    bashcommand("show-coords -B -I 90 -L 100 -r out.delta > out.coords")
+    bashcommand("nucmer --maxmatch --minmatch=1000 %s %s" % (A, B)) # --minmatch controls min length match
+    bashcommand("show-coords -B -I 90 -r out.delta > out.coords") # -I controls min identity filter
 
 
 # there might be a slight problem with this if there are repeats that appear as multiple separate blocks
@@ -65,16 +66,26 @@ def parse_nucmer(nucmer_output_file):
 
 all_plasmids = glob.glob(input_dir + "/*.fasta")
 
+# merge multi-contig fasta files
+for p_check in all_plasmids:
+    with open(p_check) as handle:
+        record_count = 0
+        for record in SeqIO.parse(handle, "fasta"):
+            record_count += 1
+        if record_count > 1:
+            p = os.path.splitext(p_check)[0]+'.merged.fasta'
+            bashcommand("~/PycharmProjects/scripts/merge_fasta.sh %s %s" % (p_check, p)) # change
+            all_plasmids = list(map(lambda x: x.replace(p_check, p), all_plasmids))
+        else:
+            p = p_check
+    p = os.path.split(p)[1]
+    sort_plasmids_into_clusters(p)
+
 with open(lengths, "r") as fin:
     for line in fin:
         plas_name = line.split()[0]
         bps = line.split()[1].rstrip()
         plasmid_lengths[plas_name] = bps
-
-# sort plasmids into clusters:
-for p in all_plasmids:
-    p = os.path.split(p)[1]
-    sort_plasmids_into_clusters(p)
 
 # go through all clusters and do pairwise alignments
 with open("plasmid_alignments_summary.tsv", "w") as sum_out:
@@ -90,8 +101,18 @@ for c in plasmid_clusters.keys():
                 if pl1 != pl2:
                     run_nucmer(pl1, pl2, input_dir)
                     alignment = parse_nucmer("out.coords")
-                    pl1_alignment_proportion = float(alignment) / float(plasmid_lengths[pl1])
-                    pl2_alignment_proportion = float(alignment) / float(plasmid_lengths[pl2])
+                    try:
+                        pl1_alignment_proportion = float(alignment) / float(plasmid_lengths[pl1])
+                    except KeyError:
+                        pl1_name = os.path.splitext(pl1)[0].replace("merged", "")
+                        pl1_name = pl1_name + "fasta"
+                        pl1_alignment_proportion = float(alignment) / float(plasmid_lengths[pl1_name])
+                    try:
+                        pl2_alignment_proportion = float(alignment) / float(plasmid_lengths[pl2])
+                    except KeyError:
+                        pl2_name = os.path.splitext(pl2)[0].replace("merged", "")
+                        pl2_name = pl2_name + "fasta"
+                        pl2_alignment_proportion = float(alignment) / float(plasmid_lengths[pl2_name])
                     cluster_alignments[c].append(pl1_alignment_proportion)
                     cluster_alignments[c].append(pl2_alignment_proportion)
                     with open("plasmid_alignments_summary.tsv", "a") as result_out:
